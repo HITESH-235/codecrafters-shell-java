@@ -25,7 +25,7 @@ public class Main {
                     System.out.println(curr+": not found");
                 }
             }
-            else if (input.equals("exit")) {
+            else if (parts[0].equals("exit")) {
                 sc.close();
                 break;
             }
