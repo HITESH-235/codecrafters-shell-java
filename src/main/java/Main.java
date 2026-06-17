@@ -21,14 +21,9 @@ public class Main {
             else if (parts[0].equals("type")) {
                 String curr = parts[1];
 
-                if (curr.equals("echo") ||
-                    curr.equals("exit") ||
-                    curr.equals("type")) {
-
+                if (curr.equals("echo") || curr.equals("exit") || curr.equals("type")) {
                     System.out.println(curr + " is a shell builtin");
-                } else {
-                    System.out.println(curr + ": not found");
-                }
+                } else System.out.println(curr + ": not found");
             }
             else if (parts[0].equals("exit")) {
                 break;
