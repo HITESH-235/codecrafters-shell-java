@@ -1,4 +1,5 @@
-import java.util.Scanner;
+import java.util.*;
+import java.io.*;
 
 public class Main {
     public static void main(String[] args) throws Exception {
@@ -18,13 +19,33 @@ public class Main {
                 }
                 System.out.println();
             }
-            else if (parts[0].equals("type")) {
-                String curr = parts[1];
 
-                if (curr.equals("echo") || curr.equals("exit") || curr.equals("type")) {
-                    System.out.println(curr + " is a shell builtin");
-                } else System.out.println(curr + ": not found");
+
+            else if (parts[0].equals("type")) {
+                String cmd = parts[1];
+                if (cmd.equals("echo") || cmd.equals("exit") || cmd.equals("type")) 
+                    System.out.println(cmd + " is a shell builtin");
+                else {
+                    String pathEnv = System.getenv("PATH");
+                    String[] directories = pathEnv.split(File.pathSeparator);
+    
+                    boolean found = false;
+                    for (String dir : directories) {
+                        File file = new File(dir, cmd);
+
+                        if (file.exists() && file.canExecute()) {
+                            System.out.println(cmd + " is " + file.getAbsolutePath());
+                            found = true;
+                            break;
+                        }
+                    }
+
+                    if (!found) {
+                        System.out.println(cmd+": not found");
+                    }
+                }
             }
+
             else if (parts[0].equals("exit")) {
                 break;
             }
