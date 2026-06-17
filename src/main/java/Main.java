@@ -5,6 +5,8 @@ public class Main {
     public static void main(String[] args) throws Exception {
         Scanner sc = new Scanner(System.in);
 
+        File currentDirectory = new File(System.getProperty("user.dir"));
+
         while (true) {
             System.out.print("$ ");
             String input  = sc.nextLine().trim();
@@ -36,13 +38,22 @@ public class Main {
                 }
             }
 
-            else if (parts[0].equals("pwd")) {
-                System.out.println(System.getProperty("user.dir"));
+            else if (parts[0].equals("cd")) {
+                File target = new File(parts[1]);
+
+                if (target.exists() && target.isDirectory()) {
+                    currentDirectory = target;
+                }
+                else {
+                    System.out.println("cd: "+parts[1]+": No such file or directory");
+                }
             }
 
-            else if (parts[0].equals("exit")) {
-                break;
+            else if (parts[0].equals("pwd")) {
+                System.out.println(currentDirectory.getAbsolutePath());
             }
+
+            else if (parts[0].equals("exit")) break;
 
             else {
                 String executable = findExecutable(parts[0]);
