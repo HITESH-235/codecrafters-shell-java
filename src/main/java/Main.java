@@ -8,7 +8,7 @@ public class Main {
         while (true) {
             System.out.print("$ ");
             String input  = sc.nextLine().trim();
-            String[] parts = input.split(" ");
+            String[] parts = input.split("\\s+");
 
             if (parts[0].equals("echo")) {
                 for (int i = 1; i < parts.length; i++) {
@@ -26,23 +26,10 @@ public class Main {
                 if (cmd.equals("echo") || cmd.equals("exit") || cmd.equals("type")) 
                     System.out.println(cmd + " is a shell builtin");
                 else {
-                    String pathEnv = System.getenv("PATH");
-                    String[] directories = pathEnv.split(File.pathSeparator);
-    
-                    boolean found = false;
-                    for (String dir : directories) {
-                        File file = new File(dir, cmd);
-
-                        if (file.exists() && file.canExecute()) {
-                            System.out.println(cmd + " is " + file.getAbsolutePath());
-                            found = true;
-                            break;
-                        }
-                    }
-
-                    if (!found) {
-                        System.out.println(cmd+": not found");
-                    }
+                    String executable = findExecutable(cmd);
+                    
+                    if (executable != null) System.out.println(cmd + " is " + executable);
+                    else System.out.println(cmd + ": not found");
                 }
             }
 
@@ -50,9 +37,33 @@ public class Main {
                 break;
             }
             else {
-                System.out.println(parts[0] + ": command not found");
-            }   
+                String executable = findExecutable(parts[0]);
+
+                if (executable != null) {
+                    ProcessBuilder pb = new ProcessBuilder(parts);
+
+                    pb.inheritIO();
+                    Process process = pb.start();
+                    process.waitFor();
+                }
+                else System.out.println(parts[0] + ": command not found");
+            }
         }
         sc.close();
+    }
+
+    private static String findExecutable(String command) {
+        String pathEnv = System.getenv("PATH");
+        String[] directories = pathEnv.split(File.pathSeparator);
+
+        for (String dir : directories) {
+            File file = new File(dir, command);
+
+            if (file.exists() && file.canExecute()) {
+                return file.getAbsolutePath();
+            }
+        }
+
+        return null;
     }
 }
