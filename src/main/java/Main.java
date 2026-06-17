@@ -18,7 +18,7 @@ public class Main {
             }
             else if (parts[0].equals("type")) {
                 String curr = parts[1];
-                if (curr.equals("echo") || curr.equals("type")) {
+                if (curr.equals("echo") || curr.equals("exit")) {
                     System.out.println(curr+" is a shell builtin");
                 }
                 else {
