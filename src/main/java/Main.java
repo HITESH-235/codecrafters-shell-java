@@ -7,11 +7,20 @@ public class Main {
         while (true) {
             System.out.print("$ ");
             String input  = sc.nextLine().trim();
-            if (input.equals("exit")) {
+            String[] parts = input.split(" ");
+
+            if (parts[0].equals("echo")) {
+                for (int i=1; i<parts.length; i++) {
+                    System.out.print(parts[i]);
+                    System.out.print((i < parts.length-1) ? " ":"");
+                }
+                System.out.println();
+            }
+            else if (input.equals("exit")) {
                 sc.close();
                 break;
             }
-            System.out.println(input+": command not found");    
+            else System.out.println(input+": command not found");    
             // sc.close();   
         }
     }
