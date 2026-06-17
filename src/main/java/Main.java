@@ -16,6 +16,15 @@ public class Main {
                 }
                 System.out.println();
             }
+            else if (parts[0].equals("type")) {
+                String curr = parts[1];
+                if (curr.equals("echo") || curr.equals("type")) {
+                    System.out.println(curr+" is a shell builtin");
+                }
+                else {
+                    System.out.println(curr+": not found");
+                }
+            }
             else if (input.equals("exit")) {
                 sc.close();
                 break;
