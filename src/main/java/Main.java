@@ -23,7 +23,10 @@ public class Main {
 
             else if (parts[0].equals("type")) {
                 String cmd = parts[1];
-                if (cmd.equals("echo") || cmd.equals("exit") || cmd.equals("type")) 
+                if (cmd.equals("echo") 
+                    || cmd.equals("exit") 
+                    || cmd.equals("type") 
+                    || cmd.equals("pwd"))
                     System.out.println(cmd + " is a shell builtin");
                 else {
                     String executable = findExecutable(cmd);
@@ -33,9 +36,14 @@ public class Main {
                 }
             }
 
+            else if (parts[0].equals("pwd")) {
+                System.out.println(System.getProperty("user.dir"));
+            }
+
             else if (parts[0].equals("exit")) {
                 break;
             }
+
             else {
                 String executable = findExecutable(parts[0]);
 
