@@ -135,7 +135,11 @@ public class Main {
                         continue;
                     }
 
-                    ProcessBuilder pb = new ProcessBuilder(seg.args);
+                    // Create arguments array where index 0 is resolved to the exact path
+                    String[] execArgs = Arrays.copyOf(seg.args, seg.args.length);
+                    execArgs[0] = executable;
+
+                    ProcessBuilder pb = new ProcessBuilder(execArgs);
                     pb.directory(currentDirectory);
 
                     // Map Input streams cleanly based on dynamic pipelines
@@ -268,8 +272,6 @@ public class Main {
             System.exit(0);
         }
         else if (cmd.equals("jobs")) {
-            // Under this stage, 'jobs' must run with an empty implementation if there are no active background jobs.
-            // When there are no background jobs, running 'jobs' should produce no output.
             List<Integer> done = new ArrayList<>();
             if (seg.args.length > 1) { 
                 try {
@@ -618,6 +620,12 @@ public class Main {
     }
 
     private static String findExecutable(String command) {
+        if (command.contains("/") || command.contains(File.separator)) {
+            File file = new File(command);
+            if (file.exists() && file.canExecute()) return file.getAbsolutePath();
+            return null;
+        }
+
         String pathEnv = System.getenv("PATH");
         if (pathEnv == null) return null;
         String[] directories = pathEnv.split(File.pathSeparator);
