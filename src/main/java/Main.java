@@ -9,7 +9,7 @@ public class Main {
     private static TreeMap<Integer, Job> backgroundJobs = new TreeMap<>();
 
     static {
-        // Detect if standard input/output are attached to an interactive terminal console
+        // Core Guardrail: Detect if running under an interactive TTY console or automated tests
         isTty = (System.console() != null);
     }
 
@@ -67,7 +67,7 @@ public class Main {
             String[] rawParts = parseInput(input);
             if (rawParts.length == 0) continue;
 
-            // Detect background execution
+            // Detect background execution indicator
             boolean isBackground = false;
             if (rawParts[rawParts.length - 1].equals("&")) {
                 isBackground = true;
@@ -83,7 +83,7 @@ public class Main {
                 continue;
             }
 
-            // Pipeline / Async Execution
+            // Pipelines & Async Command Execution
             List<Process> procs = new ArrayList<>();
             List<Thread> threads = new ArrayList<>();
             List<StreamCopier> copiers = new ArrayList<>();
@@ -133,7 +133,7 @@ public class Main {
                     ProcessBuilder pb = new ProcessBuilder(seg.args);
                     pb.directory(currentDirectory);
 
-                    // Map I/O securely
+                    // Map Input streams cleanly based on dynamic pipelines
                     if (currentIn == System.in) pb.redirectInput(ProcessBuilder.Redirect.INHERIT);
                     else pb.redirectInput(ProcessBuilder.Redirect.PIPE);
 
@@ -150,7 +150,7 @@ public class Main {
                     Process p = pb.start();
                     procs.add(p);
 
-                    // Wire pipes 
+                    // Wire dynamic pipeline process streams using parallel copy threads
                     if (currentIn != System.in) {
                         StreamCopier sc = new StreamCopier(currentIn, p.getOutputStream(), true);
                         sc.start();
@@ -379,14 +379,14 @@ public class Main {
     private static List<String> getCompletions(String prefix) {
         Set<String> matches = new TreeSet<>();
         
-        // Check Builtins
+        // Search Builtins
         for (String builtin : BUILTINS) {
             if (builtin.startsWith(prefix)) {
                 matches.add(builtin);
             }
         }
 
-        // Check Executables in PATH
+        // Search Executables inside system PATH
         String pathEnv = System.getenv("PATH");
         if (pathEnv != null) {
             String[] directories = pathEnv.split(File.pathSeparator);
@@ -411,6 +411,9 @@ public class Main {
         StringBuilder sb = new StringBuilder();
         setTerminalRaw(true);
 
+        int tabCount = 0;
+        String lastTabInput = "";
+
         try {
             while (true) {
                 int code = reader.read();
@@ -425,7 +428,7 @@ public class Main {
                     System.out.print("\r\n");
                     System.out.flush();
                     break;
-                } else if (code == 9) { // TAB Key
+                } else if (code == 9) { // TAB Key Handler
                     String currentInput = sb.toString();
                     
                     if (!currentInput.contains(" ") && !currentInput.isEmpty()) {
@@ -437,8 +440,14 @@ public class Main {
                             sb.append(completion);
                             System.out.print(completion);
                             System.out.flush();
+                            
+                            // Reset tracking
+                            tabCount = 0;
+                            lastTabInput = "";
                         } else if (matches.size() > 1) {
-                            // Multiple matches - find longest common prefix
+                            // Multiple Matches Found
+
+                            // 1. Longest Common Prefix expansion logic
                             String commonPrefix = matches.get(0);
                             for (int i = 1; i < matches.size(); i++) {
                                 String match = matches.get(i);
@@ -449,27 +458,53 @@ public class Main {
                                 commonPrefix = commonPrefix.substring(0, j);
                             }
 
+                            // 2. Manage tab sequence tracking
+                            if (currentInput.equals(lastTabInput)) {
+                                tabCount++;
+                            } else {
+                                tabCount = 1;
+                                lastTabInput = currentInput;
+                            }
+
                             if (commonPrefix.length() > currentInput.length()) {
-                                // Auto-fill the common part and beep
+                                // Expand user input up to the longest common prefix first and ring bell
                                 String completion = commonPrefix.substring(currentInput.length());
                                 sb.append(completion);
                                 System.out.print(completion);
-                                System.out.flush();
                                 System.out.print((char) 7);
                                 System.out.flush();
+                                
+                                // Reset tracker state with the newly-extended input
+                                tabCount = 1;
+                                lastTabInput = sb.toString();
                             } else {
-                                // No further common prefix to autofill, just beep
-                                System.out.print((char) 7);
-                                System.out.flush();
+                                // No more common characters left to append
+                                if (tabCount == 1) {
+                                    // First tab press on ambiguous matching rings the bell
+                                    System.out.print((char) 7);
+                                    System.out.flush();
+                                } else if (tabCount >= 2) {
+                                    // Second tab press displays all matches alphabetically
+                                    System.out.print("\r\n" + String.join("  ", matches) + "\r\n");
+                                    System.out.print("$ " + currentInput);
+                                    System.out.flush();
+                                    
+                                    tabCount = 0;
+                                    lastTabInput = "";
+                                }
                             }
                         } else {
-                            // No matches at all, ring bell
+                            // No matches, ring bell
                             System.out.print((char) 7);
                             System.out.flush();
+                            tabCount = 0;
+                            lastTabInput = "";
                         }
                     } else {
                         System.out.print((char) 7);
                         System.out.flush();
+                        tabCount = 0;
+                        lastTabInput = "";
                     }
                 } else if (code == 127 || code == 8) { // Backspace
                     if (sb.length() > 0) {
@@ -477,10 +512,14 @@ public class Main {
                         System.out.print("\b \b");
                         System.out.flush();
                     }
+                    tabCount = 0;
+                    lastTabInput = "";
                 } else {
                     sb.append(c);
                     System.out.print(c);
                     System.out.flush();
+                    tabCount = 0;
+                    lastTabInput = "";
                 }
             }
         } finally {
