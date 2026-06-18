@@ -41,7 +41,10 @@ public class Main {
             else if (parts[0].equals("cd")) {
                 File target;
 
-                if (parts[1].startsWith("/")) {
+                if (parts[1].equals("~")) {
+                    target = new File(System.getenv("HOME"));
+                }
+                else if (parts[1].startsWith("/")) {
                     target = new File(parts[1]);
                 } else {
                     target = new File(currentDirectory, parts[1]);
