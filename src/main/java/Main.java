@@ -12,14 +12,35 @@ public class Main {
             String input  = sc.nextLine().trim();
             String[] parts = parseInput(input);
 
+            int redirectIndex = -1;
+
+            for (int i = 0; i < parts.length; i++) {
+                if (parts[i].equals(">") || parts[i].equals("1>")) {
+                    redirectIndex = i;
+                    break;
+                }
+            }
+
+            
             if (parts[0].equals("echo")) {
-                for (int i = 1; i < parts.length; i++) {
-                    System.out.print(parts[i]);
-                    if (i < parts.length - 1) {
-                        System.out.print(" ");
+                int end = (redirectIndex == -1) ? parts.length : redirectIndex;
+                StringBuilder sb = new StringBuilder();
+
+                for (int i = 1; i < end; i++) {
+                    sb.append(parts[i]);
+
+                    if (i < end - 1) {
+                        sb.append(" ");
                     }
                 }
-                System.out.println();
+
+                if (redirectIndex == -1) {
+                    System.out.println(sb);
+                } else {
+                    try (PrintWriter pw = new PrintWriter(parts[redirectIndex + 1])) {
+                        pw.println(sb);
+                    }
+                }
             }
 
 
@@ -71,15 +92,33 @@ public class Main {
                 String executable = findExecutable(parts[0]);
 
                 if (executable != null) {
-                    ProcessBuilder pb = new ProcessBuilder(parts);
+
+                    String[] commandParts;
+
+                    if (redirectIndex == -1) {
+                        commandParts = parts;
+                    } else {
+                        commandParts = Arrays.copyOfRange(parts, 0, redirectIndex);
+                    }
+
+                    ProcessBuilder pb = new ProcessBuilder(commandParts);
 
                     pb.directory(currentDirectory);
 
-                    pb.inheritIO();
+                    if (redirectIndex == -1) {
+                        pb.inheritIO();
+                    } else {
+                        pb.redirectOutput(new File(parts[redirectIndex + 1]));
+                        pb.redirectError(ProcessBuilder.Redirect.INHERIT);
+                    }
+
                     Process process = pb.start();
                     process.waitFor();
                 }
-                else System.out.println(parts[0] + ": command not found");
+
+                else {
+                    System.out.println(parts[0] + ": command not found");
+                }
             }
         }
         sc.close();
