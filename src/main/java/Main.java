@@ -58,10 +58,14 @@ public class Main {
         while (true) {
             reapJobsBeforePrompt();
 
+            if (isTty) setTerminalRaw(true);
+
             System.out.print("$ ");
             System.out.flush();
 
             String input = readLine(reader);
+
+            if (isTty) setTerminalRaw(false);
             if (input == null) break;
             
             input = input.trim();
@@ -531,7 +535,7 @@ public class Main {
 
     private static String readLineWithAutocomplete(Reader reader) throws Exception {
         StringBuilder sb = new StringBuilder();
-        boolean useManualEcho = setTerminalRaw(true);
+        boolean useManualEcho = true;
 
         int tabCount = 0;
         String lastTabInput = "";
@@ -655,7 +659,6 @@ public class Main {
                 }
             }
         } finally {
-            setTerminalRaw(false);
         }
 
         return sb.toString();
