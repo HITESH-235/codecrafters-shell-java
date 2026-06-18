@@ -9,7 +9,7 @@ public class Main {
     private static TreeMap<Integer, Job> backgroundJobs = new TreeMap<>();
 
     static {
-        // Core Guardrail: Detect if running under an interactive TTY console or automated tests
+        // Detect if standard input/output are attached to an interactive terminal console
         isTty = (System.console() != null);
     }
 
@@ -382,7 +382,6 @@ public class Main {
     }
 
     private static CompletionResult getCompletions(String input) {
-        // Find last unescaped space to separate commands/arguments
         int lastSpace = -1;
         boolean inSingle = false;
         boolean inDouble = false;
@@ -472,7 +471,7 @@ public class Main {
 
     private static String readLineWithAutocomplete(Reader reader) throws Exception {
         StringBuilder sb = new StringBuilder();
-        setTerminalRaw(true);
+        boolean useManualEcho = setTerminalRaw(true);
 
         int tabCount = 0;
         String lastTabInput = "";
@@ -488,8 +487,10 @@ public class Main {
                 char c = (char) code;
 
                 if (c == '\n' || c == '\r') {
-                    System.out.print("\r\n");
-                    System.out.flush();
+                    if (useManualEcho) {
+                        System.out.print("\r\n");
+                        System.out.flush();
+                    }
                     break;
                 } else if (code == 9) { // TAB Key
                     String currentInput = sb.toString();
@@ -501,11 +502,9 @@ public class Main {
 
                         if (matches.size() == 1) {
                             String completion = matches.get(0);
-                            // If it's a file, append a trailing space
                             if (!completion.endsWith("/")) {
                                 completion += " ";
                             }
-                            // Append suffix diff to terminal
                             String suffix = completion.substring(wordPrefix.length());
                             sb.append(suffix);
                             System.out.print(suffix);
@@ -546,7 +545,6 @@ public class Main {
                                     System.out.print((char) 7);
                                     System.out.flush();
                                 } else if (tabCount >= 2) {
-                                    // Map to clean alphabetic filename presentation (basenames only if directory matches)
                                     List<String> baseMatches = new ArrayList<>();
                                     for (String m : matches) {
                                         int slash = m.lastIndexOf('/');
@@ -579,15 +577,19 @@ public class Main {
                 } else if (code == 127 || code == 8) { // Backspace
                     if (sb.length() > 0) {
                         sb.deleteCharAt(sb.length() - 1);
-                        System.out.print("\b \b");
-                        System.out.flush();
+                        if (useManualEcho) {
+                            System.out.print("\b \b");
+                            System.out.flush();
+                        }
                     }
                     tabCount = 0;
                     lastTabInput = "";
                 } else {
                     sb.append(c);
-                    System.out.print(c);
-                    System.out.flush();
+                    if (useManualEcho) {
+                        System.out.print(c);
+                        System.out.flush();
+                    }
                     tabCount = 0;
                     lastTabInput = "";
                 }
@@ -599,12 +601,17 @@ public class Main {
         return sb.toString();
     }
 
-    private static void setTerminalRaw(boolean raw) {
+    private static boolean setTerminalRaw(boolean raw) {
         try {
-            String[] cmd = {"/bin/sh", "-c", raw ? "stty -icanon -echo < /dev/tty" : "stty icanon echo < /dev/tty"};
+            String command = raw 
+                ? "stty -icanon -echo < /dev/tty 2>/dev/null || stty -icanon -echo 2>/dev/null"
+                : "stty icanon echo < /dev/tty 2>/dev/null || stty icanon echo 2>/dev/null";
+            String[] cmd = {"/bin/sh", "-c", command};
             Process p = Runtime.getRuntime().exec(cmd);
-            p.waitFor();
-        } catch (Exception e) {}
+            return p.waitFor() == 0;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private static String findExecutable(String command) {
