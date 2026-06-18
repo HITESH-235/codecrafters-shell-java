@@ -8,13 +8,8 @@ public class Main {
     private static BufferedReader fallbackReader = null;
 
     static {
-        // Detect if the running environment supports interactive TTY operations
-        try {
-            Process p = Runtime.getRuntime().exec(new String[]{"/bin/sh", "-c", "stty -g < /dev/tty"});
-            isTty = (p.waitFor() == 0);
-        } catch (Exception e) {
-            isTty = false;
-        }
+        // Detect if standard input/output are attached to an interactive terminal console
+        isTty = (System.console() != null);
     }
 
     public static void main(String[] args) throws Exception {
