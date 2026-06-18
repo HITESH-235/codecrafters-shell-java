@@ -4,26 +4,39 @@ import java.io.*;
 public class Main {
     public static void main(String[] args) throws Exception {
         Scanner sc = new Scanner(System.in);
-
         File currentDirectory = new File(System.getProperty("user.dir"));
 
         while (true) {
             System.out.print("$ ");
-            String input  = sc.nextLine().trim();
+            String input = sc.nextLine().trim();
             String[] parts = parseInput(input);
 
-            int redirectIndex = -1;
+            int stdoutRedirect = -1;
+            int stderrRedirect = -1;
 
             for (int i = 0; i < parts.length; i++) {
+
                 if (parts[i].equals(">") || parts[i].equals("1>")) {
-                    redirectIndex = i;
-                    break;
+                    stdoutRedirect = i;
+                }
+
+                else if (parts[i].equals("2>")) {
+                    stderrRedirect = i;
                 }
             }
 
-            
             if (parts[0].equals("echo")) {
-                int end = (redirectIndex == -1) ? parts.length : redirectIndex;
+
+                int end = parts.length;
+
+                if (stdoutRedirect != -1) {
+                    end = stdoutRedirect;
+                }
+
+                if (stderrRedirect != -1) {
+                    end = Math.min(end, stderrRedirect);
+                }
+
                 StringBuilder sb = new StringBuilder();
 
                 for (int i = 1; i < end; i++) {
@@ -34,10 +47,14 @@ public class Main {
                     }
                 }
 
-                if (redirectIndex == -1) {
+                if (stdoutRedirect == -1) {
                     System.out.println(sb);
-                } else {
-                    try (PrintWriter pw = new PrintWriter(parts[redirectIndex + 1])) {
+                }
+
+                else {
+                    try (PrintWriter pw =
+                            new PrintWriter(parts[stdoutRedirect + 1])) {
+
                         pw.println(sb);
                     }
                 }
@@ -93,23 +110,43 @@ public class Main {
 
                 if (executable != null) {
 
-                    String[] commandParts;
+                    List<String> cmd = new ArrayList<>();
 
-                    if (redirectIndex == -1) {
-                        commandParts = parts;
-                    } else {
-                        commandParts = Arrays.copyOfRange(parts, 0, redirectIndex);
+                    for (int i = 0; i < parts.length; i++) {
+
+                        if (parts[i].equals(">")
+                                || parts[i].equals("1>")
+                                || parts[i].equals("2>")) {
+
+                            i++; // skip redirect filename
+                            continue;
+                        }
+
+                        cmd.add(parts[i]);
                     }
 
-                    ProcessBuilder pb = new ProcessBuilder(commandParts);
+                    String[] commandParts =
+                            cmd.toArray(new String[0]);
+
+                    ProcessBuilder pb =
+                            new ProcessBuilder(commandParts);
 
                     pb.directory(currentDirectory);
 
-                    if (redirectIndex == -1) {
-                        pb.inheritIO();
+                    if (stdoutRedirect != -1) {
+                        pb.redirectOutput(
+                                new File(parts[stdoutRedirect + 1]));
                     } else {
-                        pb.redirectOutput(new File(parts[redirectIndex + 1]));
-                        pb.redirectError(ProcessBuilder.Redirect.INHERIT);
+                        pb.redirectOutput(
+                                ProcessBuilder.Redirect.INHERIT);
+                    }
+
+                    if (stderrRedirect != -1) {
+                        pb.redirectError(
+                                new File(parts[stderrRedirect + 1]));
+                    } else {
+                        pb.redirectError(
+                                ProcessBuilder.Redirect.INHERIT);
                     }
 
                     Process process = pb.start();
@@ -117,7 +154,8 @@ public class Main {
                 }
 
                 else {
-                    System.out.println(parts[0] + ": command not found");
+                    System.out.println(
+                            parts[0] + ": command not found");
                 }
             }
         }
