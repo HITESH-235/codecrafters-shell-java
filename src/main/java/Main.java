@@ -62,7 +62,7 @@ public class Main {
             input = input.trim();
             if (input.isEmpty()) continue;
 
-            String originalInput = input; // Saved for background job display string
+            String originalInput = input;
 
             String[] rawParts = parseInput(input);
             if (rawParts.length == 0) continue;
@@ -133,7 +133,7 @@ public class Main {
                     ProcessBuilder pb = new ProcessBuilder(seg.args);
                     pb.directory(currentDirectory);
 
-                    // Optimise I/O mapping directly if system streams
+                    // Map I/O securely
                     if (currentIn == System.in) pb.redirectInput(ProcessBuilder.Redirect.INHERIT);
                     else pb.redirectInput(ProcessBuilder.Redirect.PIPE);
 
@@ -150,7 +150,7 @@ public class Main {
                     Process p = pb.start();
                     procs.add(p);
 
-                    // Wire piping buffers
+                    // Wire pipes 
                     if (currentIn != System.in) {
                         StreamCopier sc = new StreamCopier(currentIn, p.getOutputStream(), true);
                         sc.start();
@@ -167,12 +167,12 @@ public class Main {
                         copiers.add(sc);
                     }
                 }
-                currentIn = nextIn; // Pass input stream down the chain
+                currentIn = nextIn;
             }
 
             if (isBackground) {
                 int jobId = 1;
-                while (backgroundJobs.containsKey(jobId)) jobId++; // Recycle missing lowest ID natively
+                while (backgroundJobs.containsKey(jobId)) jobId++;
                 long pid = procs.isEmpty() ? 0 : procs.get(procs.size() - 1).pid();
                 System.out.println("[" + jobId + "] " + pid);
                 backgroundJobs.put(jobId, new Job(jobId, pid, originalInput, procs, threads, copiers));
@@ -263,7 +263,7 @@ public class Main {
         }
         else if (cmd.equals("jobs")) {
             List<Integer> done = new ArrayList<>();
-            if (seg.args.length > 1) { // Single target job
+            if (seg.args.length > 1) { 
                 try {
                     int targetId = Integer.parseInt(seg.args[1]);
                     Job j = backgroundJobs.get(targetId);
@@ -274,7 +274,7 @@ public class Main {
                         } else outStream.println("[" + j.id + "]+  Running                 " + j.commandString);
                     }
                 } catch (Exception e) {}
-            } else { // All jobs
+            } else {
                 for (Job j : backgroundJobs.values()) {
                     if (j.isDone()) {
                         outStream.println("[" + j.id + "]+  Done                    " + j.commandString);
@@ -282,7 +282,6 @@ public class Main {
                     } else outStream.println("[" + j.id + "]+  Running                 " + j.commandString);
                 }
             }
-            // Cleanup reaped instances displayed locally
             for (int id : done) backgroundJobs.remove(id);
         }
     }
@@ -321,7 +320,6 @@ public class Main {
                     out.flush();
                 }
             } catch (IOException e) {
-                // Ignore pipeline breakages caused by dying processes down the chain
             } finally {
                 if (closeOut && out != System.out && out != System.err) {
                     try { out.close(); } catch(Exception e) {}
@@ -369,7 +367,6 @@ public class Main {
         return segments;
     }
 
-    /** Dispatcher routing line-reading behavior automatically. */
     private static String readLine(Reader reader) throws Exception {
         if (isTty) {
             return readLineWithAutocomplete(reader);
@@ -377,6 +374,37 @@ public class Main {
             if (fallbackReader == null) fallbackReader = new BufferedReader(new InputStreamReader(System.in));
             return fallbackReader.readLine();
         }
+    }
+
+    private static List<String> getCompletions(String prefix) {
+        Set<String> matches = new TreeSet<>();
+        
+        // Check Builtins
+        for (String builtin : BUILTINS) {
+            if (builtin.startsWith(prefix)) {
+                matches.add(builtin);
+            }
+        }
+
+        // Check Executables in PATH
+        String pathEnv = System.getenv("PATH");
+        if (pathEnv != null) {
+            String[] directories = pathEnv.split(File.pathSeparator);
+            for (String dirPath : directories) {
+                File dir = new File(dirPath);
+                if (dir.exists() && dir.isDirectory()) {
+                    File[] files = dir.listFiles((d, name) -> name.startsWith(prefix));
+                    if (files != null) {
+                        for (File file : files) {
+                            if (file.canExecute() && !file.isDirectory()) {
+                                matches.add(file.getName());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return new ArrayList<>(matches);
     }
 
     private static String readLineWithAutocomplete(Reader reader) throws Exception {
@@ -397,22 +425,46 @@ public class Main {
                     System.out.print("\r\n");
                     System.out.flush();
                     break;
-                } else if (code == 9) { // TAB Key Autocomplete
+                } else if (code == 9) { // TAB Key
                     String currentInput = sb.toString();
                     
                     if (!currentInput.contains(" ") && !currentInput.isEmpty()) {
-                        List<String> matches = new ArrayList<>();
-                        for (String builtin : BUILTINS) {
-                            if (builtin.startsWith(currentInput)) matches.add(builtin);
-                        }
+                        List<String> matches = getCompletions(currentInput);
 
                         if (matches.size() == 1) {
+                            // Exact single match - autocomplete with trailing space
                             String completion = matches.get(0).substring(currentInput.length()) + " ";
                             sb.append(completion);
                             System.out.print(completion);
                             System.out.flush();
+                        } else if (matches.size() > 1) {
+                            // Multiple matches - find longest common prefix
+                            String commonPrefix = matches.get(0);
+                            for (int i = 1; i < matches.size(); i++) {
+                                String match = matches.get(i);
+                                int j = 0;
+                                while (j < commonPrefix.length() && j < match.length() && commonPrefix.charAt(j) == match.charAt(j)) {
+                                    j++;
+                                }
+                                commonPrefix = commonPrefix.substring(0, j);
+                            }
+
+                            if (commonPrefix.length() > currentInput.length()) {
+                                // Auto-fill the common part and beep
+                                String completion = commonPrefix.substring(currentInput.length());
+                                sb.append(completion);
+                                System.out.print(completion);
+                                System.out.flush();
+                                System.out.print((char) 7);
+                                System.out.flush();
+                            } else {
+                                // No further common prefix to autofill, just beep
+                                System.out.print((char) 7);
+                                System.out.flush();
+                            }
                         } else {
-                            System.out.print((char) 7); // ASCII Beep/Bell
+                            // No matches at all, ring bell
+                            System.out.print((char) 7);
                             System.out.flush();
                         }
                     } else {
