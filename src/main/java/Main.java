@@ -10,7 +10,7 @@ public class Main {
         while (true) {
             System.out.print("$ ");
             String input  = sc.nextLine().trim();
-            String[] parts = input.split("\\s+");
+            String[] parts = parseInput(input);
 
             if (parts[0].equals("echo")) {
                 for (int i = 1; i < parts.length; i++) {
@@ -96,5 +96,40 @@ public class Main {
         }
 
         return null;
+    }
+
+    private static String[] parseInput(String input) {
+        List<String> tokens = new ArrayList<>();
+
+        StringBuilder current = new StringBuilder();
+
+        boolean inQuotes = false;
+
+        for (int i = 0; i < input.length(); i++) {
+            char c = input.charAt(i);
+
+            if (c == '\'') {
+                inQuotes = !inQuotes;
+            }
+
+            else if (Character.isWhitespace(c) && !inQuotes) {
+
+                if (current.length() > 0) {
+                    tokens.add(current.toString());
+                    current.setLength(0);
+                }
+
+            }
+
+            else {
+                current.append(c);
+            }
+        }
+
+        if (current.length() > 0) {
+            tokens.add(current.toString());
+        }
+
+        return tokens.toArray(new String[0]);
     }
 }
