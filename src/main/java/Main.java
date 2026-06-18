@@ -2,16 +2,22 @@ import java.util.*;
 import java.io.*;
 
 public class Main {
+    private static final List<String> BUILTINS = Arrays.asList("echo", "exit", "type", "pwd", "cd");
+    private static File currentDirectory;
+
     public static void main(String[] args) throws Exception {
-        Scanner sc = new Scanner(System.in);
-        File currentDirectory = new File(System.getProperty("user.dir"));
+        currentDirectory = new File(System.getProperty("user.dir")).getCanonicalFile();
+        Reader reader = new InputStreamReader(System.in);
 
         while (true) {
             System.out.print("$ ");
-            if (!sc.hasNextLine()) {
+            System.out.flush();
+
+            String input = readLineWithAutocomplete(reader);
+            if (input == null) {
                 break;
             }
-            String input = sc.nextLine().trim();
+            input = input.trim();
             if (input.isEmpty()) {
                 continue;
             }
@@ -107,10 +113,7 @@ public class Main {
                 
                 else if (parts[0].equals("type")) {
                     String cmd = parts[1];
-                    if (cmd.equals("echo") 
-                        || cmd.equals("exit") 
-                        || cmd.equals("type") 
-                        || cmd.equals("pwd")) {
+                    if (BUILTINS.contains(cmd)) {
                         outStream.println(cmd + " is a shell builtin");
                     } else {
                         String executable = findExecutable(cmd);
@@ -192,7 +195,6 @@ public class Main {
                     }
                 }
             } finally {
-                // Ensure output streams are safely closed and flushed
                 if (outFos != null) {
                     outFos.close();
                 }
@@ -201,7 +203,92 @@ public class Main {
                 }
             }
         }
-        sc.close();
+    }
+
+    /**
+     * Reads a line of input while handling the TAB key for command-name autocompletion.
+     * Raw mode is toggled using the system's "stty" configuration.
+     */
+    private static String readLineWithAutocomplete(Reader reader) throws Exception {
+        StringBuilder sb = new StringBuilder();
+        
+        // Put the terminal into raw (non-canonical, no echo) mode
+        setTerminalRaw(true);
+
+        try {
+            while (true) {
+                int code = reader.read();
+                if (code == -1) {
+                    return null; // EOF
+                }
+
+                char c = (char) code;
+
+                if (c == '\n' || c == '\r') {
+                    // Echo the newline and return the collected command string
+                    System.out.print("\r\n");
+                    System.out.flush();
+                    break;
+                } else if (code == 9) { // TAB Key
+                    String currentInput = sb.toString();
+                    
+                    // Match tab completion only if we have not entered any space yet
+                    if (!currentInput.contains(" ") && !currentInput.isEmpty()) {
+                        List<String> matches = new ArrayList<>();
+                        for (String builtin : BUILTINS) {
+                            if (builtin.startsWith(currentInput)) {
+                                matches.add(builtin);
+                            }
+                        }
+
+                        // Exactly one match -> complete it and append a trailing space
+                        if (matches.size() == 1) {
+                            String completion = matches.get(0).substring(currentInput.length()) + " ";
+                            sb.append(completion);
+                            System.out.print(completion);
+                            System.out.flush();
+                        } else if (matches.size() > 1) {
+                            // Multiple matches -> trigger a terminal bell (optional) or do nothing
+                            System.out.print((char) 7);
+                            System.out.flush();
+                        }
+                    }
+                } else if (code == 127 || code == 8) { // Backspace (DEL or Backspace ASCII)
+                    if (sb.length() > 0) {
+                        sb.deleteCharAt(sb.length() - 1);
+                        // Move cursor back, overwrite with space, move cursor back again
+                        System.out.print("\b \b");
+                        System.out.flush();
+                    }
+                } else {
+                    sb.append(c);
+                    System.out.print(c);
+                    System.out.flush();
+                }
+            }
+        } finally {
+            // Ensure terminal is reverted back to normal (cooked) mode
+            setTerminalRaw(false);
+        }
+
+        return sb.toString();
+    }
+
+    /**
+     * Toggles terminal raw mode.
+     */
+    private static void setTerminalRaw(boolean raw) {
+        try {
+            String[] cmd = {
+                "/bin/sh",
+                "-c",
+                raw ? "stty raw -echo < /dev/tty" : "stty -raw echo < /dev/tty"
+            };
+            Process p = Runtime.getRuntime().exec(cmd);
+            p.waitFor();
+        } catch (Exception e) {
+            // Ignore if stty is not supported (e.g. non-Unix testing environments)
+        }
     }
 
     private static String findExecutable(String command) {
