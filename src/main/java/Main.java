@@ -207,10 +207,34 @@ public class Main {
         for (Job j : backgroundJobs.values()) {
             if (j.isDone()) done.add(j.id);
         }
+        if (done.isEmpty()) return;
+        Set<Integer> allIds = new TreeSet<>(backgroundJobs.keySet());
         for (int id : done) {
-            Job j = backgroundJobs.remove(id);
-            System.out.println("[" + j.id + "]+  Done                    " + j.commandString);
+            Job j = backgroundJobs.get(id);
+            String marker = getMarker(id, allIds);
+            String cmd = j.commandString;
+            if (cmd.endsWith(" &")) cmd = cmd.substring(0, cmd.length() - 2);
+            System.out.println(String.format("[%d]%s  %-24s%s", j.id, marker, "Done", cmd));
         }
+        for (int id : done) {
+            backgroundJobs.remove(id);
+        }
+    }
+
+    private static String getMarker(int jobId, Set<Integer> allJobIds) {
+        if (allJobIds.size() <= 1) return "+";
+        int highest = -1, secondHighest = -1;
+        for (int id : allJobIds) {
+            if (id > highest) {
+                secondHighest = highest;
+                highest = id;
+            } else if (id > secondHighest) {
+                secondHighest = id;
+            }
+        }
+        if (jobId == highest) return "+";
+        if (jobId == secondHighest) return "-";
+        return " ";
     }
 
     private static boolean isBuiltin(String command) {
@@ -281,23 +305,18 @@ public class Main {
         }
         else if (cmd.equals("jobs")) {
             List<Integer> done = new ArrayList<>();
-            if (seg.args.length > 1) { 
-                try {
-                    int targetId = Integer.parseInt(seg.args[1]);
-                    Job j = backgroundJobs.get(targetId);
-                    if (j != null) {
-                        if (j.isDone()) {
-                            outStream.println("[" + j.id + "]+  Done                    " + j.commandString);
-                            done.add(j.id);
-                        } else outStream.println("[" + j.id + "]+  Running                 " + j.commandString);
-                    }
-                } catch (Exception e) {}
-            } else {
-                for (Job j : backgroundJobs.values()) {
-                    if (j.isDone()) {
-                        outStream.println("[" + j.id + "]+  Done                    " + j.commandString);
-                        done.add(j.id);
-                    } else outStream.println("[" + j.id + "]+  Running                 " + j.commandString);
+            for (Job j : backgroundJobs.values()) {
+                if (j.isDone()) done.add(j.id);
+            }
+            Set<Integer> allIds = new TreeSet<>(backgroundJobs.keySet());
+            for (Job j : backgroundJobs.values()) {
+                String marker = getMarker(j.id, allIds);
+                if (done.contains(j.id)) {
+                    String cmdStr = j.commandString;
+                    if (cmdStr.endsWith(" &")) cmdStr = cmdStr.substring(0, cmdStr.length() - 2);
+                    outStream.println(String.format("[%d]%s  %-24s%s", j.id, marker, "Done", cmdStr));
+                } else {
+                    outStream.println(String.format("[%d]%s  %-24s%s", j.id, marker, "Running", j.commandString));
                 }
             }
             for (int id : done) backgroundJobs.remove(id);
