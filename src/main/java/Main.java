@@ -190,6 +190,7 @@ public class Main {
     }
 
     private static void reapJobsBeforePrompt() {
+        if (backgroundJobs.isEmpty()) return;
         List<Integer> done = new ArrayList<>();
         for (Job j : backgroundJobs.values()) {
             if (j.isDone()) done.add(j.id);
@@ -267,6 +268,8 @@ public class Main {
             System.exit(0);
         }
         else if (cmd.equals("jobs")) {
+            // Under this stage, 'jobs' must run with an empty implementation if there are no active background jobs.
+            // When there are no background jobs, running 'jobs' should produce no output.
             List<Integer> done = new ArrayList<>();
             if (seg.args.length > 1) { 
                 try {
