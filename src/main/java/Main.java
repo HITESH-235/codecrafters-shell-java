@@ -207,32 +207,29 @@ public class Main {
 
     /**
      * Reads a line of input while handling the TAB key for command-name autocompletion.
-     * Raw mode is toggled using the system's "stty" configuration.
+     * Uses TTY native echo to prevent polluting process standard stdout.
      */
     private static String readLineWithAutocomplete(Reader reader) throws Exception {
         StringBuilder sb = new StringBuilder();
         
-        // Put the terminal into raw (non-canonical, no echo) mode
+        // Put terminal into cbreak mode (non-canonical) but KEEP echoing active
         setTerminalRaw(true);
 
         try {
             while (true) {
                 int code = reader.read();
                 if (code == -1) {
-                    return null; // EOF
+                    if (sb.length() == 0) return null;
+                    break;
                 }
 
                 char c = (char) code;
 
                 if (c == '\n' || c == '\r') {
-                    // Echo the newline and return the collected command string
-                    System.out.print("\r\n");
-                    System.out.flush();
                     break;
                 } else if (code == 9) { // TAB Key
                     String currentInput = sb.toString();
                     
-                    // Match tab completion only if we have not entered any space yet
                     if (!currentInput.contains(" ") && !currentInput.isEmpty()) {
                         List<String> matches = new ArrayList<>();
                         for (String builtin : BUILTINS) {
@@ -241,33 +238,32 @@ public class Main {
                             }
                         }
 
-                        // Exactly one match -> complete it and append a trailing space
+                        // Single match found -> complete it
                         if (matches.size() == 1) {
                             String completion = matches.get(0).substring(currentInput.length()) + " ";
                             sb.append(completion);
+                            // Print completion to stdout so the shell terminal displays it
                             System.out.print(completion);
                             System.out.flush();
                         } else if (matches.size() > 1) {
-                            // Multiple matches -> trigger a terminal bell (optional) or do nothing
+                            // Multiple matches -> trigger a terminal bell sound
                             System.out.print((char) 7);
                             System.out.flush();
                         }
                     }
-                } else if (code == 127 || code == 8) { // Backspace (DEL or Backspace ASCII)
+                } else if (code == 127 || code == 8) { // Backspace
                     if (sb.length() > 0) {
                         sb.deleteCharAt(sb.length() - 1);
-                        // Move cursor back, overwrite with space, move cursor back again
+                        // Erase visually
                         System.out.print("\b \b");
                         System.out.flush();
                     }
                 } else {
                     sb.append(c);
-                    System.out.print(c);
-                    System.out.flush();
                 }
             }
         } finally {
-            // Ensure terminal is reverted back to normal (cooked) mode
+            // Restore TTY back to standard canonical mode
             setTerminalRaw(false);
         }
 
@@ -275,19 +271,19 @@ public class Main {
     }
 
     /**
-     * Toggles terminal raw mode.
+     * Toggles terminal mode between canonical (cooked) and non-canonical (cbreak/raw) while retaining echo.
      */
     private static void setTerminalRaw(boolean raw) {
         try {
             String[] cmd = {
                 "/bin/sh",
                 "-c",
-                raw ? "stty raw -echo < /dev/tty" : "stty -raw echo < /dev/tty"
+                raw ? "stty -icanon echo < /dev/tty" : "stty icanon echo < /dev/tty"
             };
             Process p = Runtime.getRuntime().exec(cmd);
             p.waitFor();
         } catch (Exception e) {
-            // Ignore if stty is not supported (e.g. non-Unix testing environments)
+            // Ignore if stty is not supported (non-Unix runner)
         }
     }
 
