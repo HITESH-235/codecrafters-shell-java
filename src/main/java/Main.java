@@ -92,6 +92,8 @@ public class Main {
             List<Process> procs = new ArrayList<>();
             List<Thread> threads = new ArrayList<>();
             List<StreamCopier> copiers = new ArrayList<>();
+            Process lastSegmentProcess = null;
+            Thread lastSegmentThread = null;
 
             InputStream currentIn = System.in;
 
@@ -121,10 +123,13 @@ public class Main {
                         } finally {
                             if (threadOut != System.out && threadOut != System.err) try { threadOut.close(); } catch (Exception e) {}
                             if (threadErr != System.err && threadErr != System.out) try { threadErr.close(); } catch (Exception e) {}
+                            if (threadIn != System.in) try { threadIn.close(); } catch (Exception e) {}
                         }
                     });
                     t.start();
                     threads.add(t);
+                    lastSegmentProcess = null;
+                    lastSegmentThread = t;
                 } else {
                     String executable = findExecutable(seg.args[0]);
                     if (executable == null) {
@@ -166,6 +171,8 @@ public class Main {
 
                     Process p = pb.start();
                     procs.add(p);
+                    lastSegmentProcess = p;
+                    lastSegmentThread = null;
 
                     // Wire dynamic pipeline process streams using parallel copy threads
                     if (currentIn != System.in) {
@@ -194,7 +201,25 @@ public class Main {
                 System.out.println("[" + jobId + "] " + pid);
                 backgroundJobs.put(jobId, new Job(jobId, pid, originalInput, procs, threads, copiers));
             } else {
-                for (Process p : procs) p.waitFor();
+                // Wait for the last segment's component to finish first
+                if (lastSegmentProcess != null) {
+                    lastSegmentProcess.waitFor();
+                } else if (lastSegmentThread != null) {
+                    lastSegmentThread.join();
+                }
+
+                // Close all process streams to cascade SIGPIPE upstream
+                for (Process p : procs) {
+                    try { p.getInputStream().close(); } catch (Exception e) {}
+                    try { p.getErrorStream().close(); } catch (Exception e) {}
+                    try { p.getOutputStream().close(); } catch (Exception e) {}
+                }
+
+                // Clean up remaining alive processes
+                for (Process p : procs) {
+                    if (p.isAlive()) p.destroyForcibly();
+                    p.waitFor();
+                }
                 for (Thread t : threads) t.join();
                 for (StreamCopier sc : copiers) sc.join();
             }
@@ -360,6 +385,9 @@ public class Main {
             } finally {
                 if (closeOut && out != System.out && out != System.err) {
                     try { out.close(); } catch(Exception e) {}
+                }
+                if (in != System.in) {
+                    try { in.close(); } catch(Exception e) {}
                 }
             }
         }
