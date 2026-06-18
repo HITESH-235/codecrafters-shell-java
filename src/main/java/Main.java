@@ -39,13 +39,22 @@ public class Main {
             }
 
             else if (parts[0].equals("cd")) {
-                File target = new File(parts[1]);
+                File target;
+
+                if (parts[1].startsWith("/")) {
+                    target = new File(parts[1]);
+                } else {
+                    target = new File(currentDirectory, parts[1]);
+                }
+
+                target = target.getCanonicalFile();
 
                 if (target.exists() && target.isDirectory()) {
                     currentDirectory = target;
-                }
-                else {
-                    System.out.println("cd: "+parts[1]+": No such file or directory");
+                } else {
+                    System.out.println(
+                        "cd: " + parts[1] + ": No such file or directory"
+                    );
                 }
             }
 
