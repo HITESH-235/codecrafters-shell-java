@@ -103,22 +103,29 @@ public class Main {
 
         StringBuilder current = new StringBuilder();
 
-        boolean inQuotes = false;
+        boolean inSingleQuotes = false;
+        boolean inDoubleQuotes = false;
 
         for (int i = 0; i < input.length(); i++) {
             char c = input.charAt(i);
 
-            if (c == '\'') {
-                inQuotes = !inQuotes;
+            if (c == '\'' && !inDoubleQuotes) {
+                inSingleQuotes = !inSingleQuotes;
             }
 
-            else if (Character.isWhitespace(c) && !inQuotes) {
+            else if (c == '"' && !inSingleQuotes) {
+                inDoubleQuotes = !inDoubleQuotes;
+            }
 
+            else if (
+                Character.isWhitespace(c)
+                && !inSingleQuotes
+                && !inDoubleQuotes
+            ) {
                 if (current.length() > 0) {
                     tokens.add(current.toString());
                     current.setLength(0);
                 }
-
             }
 
             else {
