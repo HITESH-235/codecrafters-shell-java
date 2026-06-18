@@ -4,6 +4,18 @@ import java.io.*;
 public class Main {
     private static final List<String> BUILTINS = Arrays.asList("echo", "exit", "type", "pwd", "cd");
     private static File currentDirectory;
+    private static boolean isTty = false;
+    private static BufferedReader fallbackReader = null;
+
+    static {
+        // Detect if the running environment supports interactive TTY operations
+        try {
+            Process p = Runtime.getRuntime().exec(new String[]{"/bin/sh", "-c", "stty -g < /dev/tty"});
+            isTty = (p.waitFor() == 0);
+        } catch (Exception e) {
+            isTty = false;
+        }
+    }
 
     public static void main(String[] args) throws Exception {
         currentDirectory = new File(System.getProperty("user.dir")).getCanonicalFile();
@@ -13,7 +25,7 @@ public class Main {
             System.out.print("$ ");
             System.out.flush();
 
-            String input = readLineWithAutocomplete(reader);
+            String input = readLine(reader);
             if (input == null) {
                 break;
             }
@@ -206,13 +218,26 @@ public class Main {
     }
 
     /**
-     * Reads a line of input while handling the TAB key for command-name autocompletion.
-     * Uses TTY native echo to prevent polluting process standard stdout.
+     * Dispatcher that routes line-reading behavior based on environment type.
+     */
+    private static String readLine(Reader reader) throws Exception {
+        if (isTty) {
+            return readLineWithAutocomplete(reader);
+        } else {
+            if (fallbackReader == null) {
+                fallbackReader = new BufferedReader(new InputStreamReader(System.in));
+            }
+            return fallbackReader.readLine();
+        }
+    }
+
+    /**
+     * Reads a line of input with full character control and manual echo to prevent spacing errors.
      */
     private static String readLineWithAutocomplete(Reader reader) throws Exception {
         StringBuilder sb = new StringBuilder();
         
-        // Put terminal into cbreak mode (non-canonical) but KEEP echoing active
+        // Disable both line buffering (canonical mode) and native terminal echoing
         setTerminalRaw(true);
 
         try {
@@ -226,6 +251,8 @@ public class Main {
                 char c = (char) code;
 
                 if (c == '\n' || c == '\r') {
+                    System.out.print("\r\n");
+                    System.out.flush();
                     break;
                 } else if (code == 9) { // TAB Key
                     String currentInput = sb.toString();
@@ -238,32 +265,31 @@ public class Main {
                             }
                         }
 
-                        // Single match found -> complete it
+                        // Complete on matching exactly 1 shell builtin
                         if (matches.size() == 1) {
                             String completion = matches.get(0).substring(currentInput.length()) + " ";
                             sb.append(completion);
-                            // Print completion to stdout so the shell terminal displays it
                             System.out.print(completion);
                             System.out.flush();
                         } else if (matches.size() > 1) {
-                            // Multiple matches -> trigger a terminal bell sound
-                            System.out.print((char) 7);
+                            System.out.print((char) 7); // ASCII Alert Bell
                             System.out.flush();
                         }
                     }
-                } else if (code == 127 || code == 8) { // Backspace
+                } else if (code == 127 || code == 8) { // Backspace / DEL
                     if (sb.length() > 0) {
                         sb.deleteCharAt(sb.length() - 1);
-                        // Erase visually
                         System.out.print("\b \b");
                         System.out.flush();
                     }
                 } else {
                     sb.append(c);
+                    System.out.print(c);
+                    System.out.flush();
                 }
             }
         } finally {
-            // Restore TTY back to standard canonical mode
+            // Restore TTY back to standard settings
             setTerminalRaw(false);
         }
 
@@ -271,19 +297,19 @@ public class Main {
     }
 
     /**
-     * Toggles terminal mode between canonical (cooked) and non-canonical (cbreak/raw) while retaining echo.
+     * Configures the active system TTY to completely silence or restore echoes.
      */
     private static void setTerminalRaw(boolean raw) {
         try {
             String[] cmd = {
                 "/bin/sh",
                 "-c",
-                raw ? "stty -icanon echo < /dev/tty" : "stty icanon echo < /dev/tty"
+                raw ? "stty -icanon -echo < /dev/tty" : "stty icanon echo < /dev/tty"
             };
             Process p = Runtime.getRuntime().exec(cmd);
             p.waitFor();
         } catch (Exception e) {
-            // Ignore if stty is not supported (non-Unix runner)
+            // Quietly fall back if system execution is blocked
         }
     }
 
