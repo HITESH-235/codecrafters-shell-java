@@ -46,6 +46,11 @@ public class Main {
         boolean stderrAppend;
     }
 
+    static class CompletionResult {
+        List<String> matches;
+        String wordPrefix;
+    }
+
     public static void main(String[] args) throws Exception {
         currentDirectory = new File(System.getProperty("user.dir")).getCanonicalFile();
         Reader reader = new InputStreamReader(System.in);
@@ -376,35 +381,93 @@ public class Main {
         }
     }
 
-    private static List<String> getCompletions(String prefix) {
-        Set<String> matches = new TreeSet<>();
-        
-        // Search Builtins
-        for (String builtin : BUILTINS) {
-            if (builtin.startsWith(prefix)) {
-                matches.add(builtin);
+    private static CompletionResult getCompletions(String input) {
+        // Find last unescaped space to separate commands/arguments
+        int lastSpace = -1;
+        boolean inSingle = false;
+        boolean inDouble = false;
+        for (int i = 0; i < input.length(); i++) {
+            char ch = input.charAt(i);
+            if (ch == '\'' && !inDouble) inSingle = !inSingle;
+            else if (ch == '"' && !inSingle) inDouble = !inDouble;
+            else if (Character.isWhitespace(ch) && !inSingle && !inDouble) {
+                lastSpace = i;
             }
         }
 
-        // Search Executables inside system PATH
-        String pathEnv = System.getenv("PATH");
-        if (pathEnv != null) {
-            String[] directories = pathEnv.split(File.pathSeparator);
-            for (String dirPath : directories) {
-                File dir = new File(dirPath);
-                if (dir.exists() && dir.isDirectory()) {
-                    File[] files = dir.listFiles((d, name) -> name.startsWith(prefix));
-                    if (files != null) {
-                        for (File file : files) {
-                            if (file.canExecute() && !file.isDirectory()) {
-                                matches.add(file.getName());
+        if (lastSpace == -1) {
+            // Command Name completion
+            Set<String> matches = new TreeSet<>();
+            for (String builtin : BUILTINS) {
+                if (builtin.startsWith(input)) {
+                    matches.add(builtin);
+                }
+            }
+            String pathEnv = System.getenv("PATH");
+            if (pathEnv != null) {
+                String[] directories = pathEnv.split(File.pathSeparator);
+                for (String dirPath : directories) {
+                    File dir = new File(dirPath);
+                    if (dir.exists() && dir.isDirectory()) {
+                        File[] files = dir.listFiles((d, name) -> name.startsWith(input));
+                        if (files != null) {
+                            for (File file : files) {
+                                if (file.canExecute() && !file.isDirectory()) {
+                                    matches.add(file.getName());
+                                }
                             }
                         }
                     }
                 }
             }
+            CompletionResult res = new CompletionResult();
+            res.matches = new ArrayList<>(matches);
+            res.wordPrefix = input;
+            return res;
+        } else {
+            // Filename / Path completion
+            String wordPrefix = input.substring(lastSpace + 1);
+            String dirPrefix = "";
+            int lastSlash = wordPrefix.lastIndexOf('/');
+            String filePrefix = wordPrefix;
+            File searchDir = currentDirectory;
+            if (lastSlash != -1) {
+                dirPrefix = wordPrefix.substring(0, lastSlash + 1);
+                filePrefix = wordPrefix.substring(lastSlash + 1);
+                String resolvedDirStr = dirPrefix;
+                if (resolvedDirStr.startsWith("~")) {
+                    resolvedDirStr = System.getenv("HOME") + resolvedDirStr.substring(1);
+                }
+                if (resolvedDirStr.startsWith("/")) {
+                    searchDir = new File(resolvedDirStr);
+                } else {
+                    searchDir = new File(currentDirectory, resolvedDirStr);
+                }
+            }
+
+            Set<String> matches = new TreeSet<>();
+            if (searchDir.exists() && searchDir.isDirectory()) {
+                File[] files = searchDir.listFiles();
+                if (files != null) {
+                    for (File f : files) {
+                        if (f.getName().startsWith(filePrefix)) {
+                            if (f.getName().startsWith(".") && !filePrefix.startsWith(".")) {
+                                continue;
+                            }
+                            String completion = dirPrefix + f.getName();
+                            if (f.isDirectory()) {
+                                completion += "/";
+                            }
+                            matches.add(completion);
+                        }
+                    }
+                }
+            }
+            CompletionResult res = new CompletionResult();
+            res.matches = new ArrayList<>(matches);
+            res.wordPrefix = wordPrefix;
+            return res;
         }
-        return new ArrayList<>(matches);
     }
 
     private static String readLineWithAutocomplete(Reader reader) throws Exception {
@@ -428,26 +491,30 @@ public class Main {
                     System.out.print("\r\n");
                     System.out.flush();
                     break;
-                } else if (code == 9) { // TAB Key Handler
+                } else if (code == 9) { // TAB Key
                     String currentInput = sb.toString();
                     
-                    if (!currentInput.contains(" ") && !currentInput.isEmpty()) {
-                        List<String> matches = getCompletions(currentInput);
+                    if (!currentInput.isEmpty()) {
+                        CompletionResult cr = getCompletions(currentInput);
+                        List<String> matches = cr.matches;
+                        String wordPrefix = cr.wordPrefix;
 
                         if (matches.size() == 1) {
-                            // Exact single match - autocomplete with trailing space
-                            String completion = matches.get(0).substring(currentInput.length()) + " ";
-                            sb.append(completion);
-                            System.out.print(completion);
+                            String completion = matches.get(0);
+                            // If it's a file, append a trailing space
+                            if (!completion.endsWith("/")) {
+                                completion += " ";
+                            }
+                            // Append suffix diff to terminal
+                            String suffix = completion.substring(wordPrefix.length());
+                            sb.append(suffix);
+                            System.out.print(suffix);
                             System.out.flush();
                             
-                            // Reset tracking
                             tabCount = 0;
                             lastTabInput = "";
                         } else if (matches.size() > 1) {
-                            // Multiple Matches Found
-
-                            // 1. Longest Common Prefix expansion logic
+                            // Find longest common prefix of matches
                             String commonPrefix = matches.get(0);
                             for (int i = 1; i < matches.size(); i++) {
                                 String match = matches.get(i);
@@ -458,7 +525,6 @@ public class Main {
                                 commonPrefix = commonPrefix.substring(0, j);
                             }
 
-                            // 2. Manage tab sequence tracking
                             if (currentInput.equals(lastTabInput)) {
                                 tabCount++;
                             } else {
@@ -466,26 +532,31 @@ public class Main {
                                 lastTabInput = currentInput;
                             }
 
-                            if (commonPrefix.length() > currentInput.length()) {
-                                // Expand user input up to the longest common prefix first and ring bell
-                                String completion = commonPrefix.substring(currentInput.length());
-                                sb.append(completion);
-                                System.out.print(completion);
+                            if (commonPrefix.length() > wordPrefix.length()) {
+                                String suffix = commonPrefix.substring(wordPrefix.length());
+                                sb.append(suffix);
+                                System.out.print(suffix);
                                 System.out.print((char) 7);
                                 System.out.flush();
                                 
-                                // Reset tracker state with the newly-extended input
                                 tabCount = 1;
                                 lastTabInput = sb.toString();
                             } else {
-                                // No more common characters left to append
                                 if (tabCount == 1) {
-                                    // First tab press on ambiguous matching rings the bell
                                     System.out.print((char) 7);
                                     System.out.flush();
                                 } else if (tabCount >= 2) {
-                                    // Second tab press displays all matches alphabetically
-                                    System.out.print("\r\n" + String.join("  ", matches) + "\r\n");
+                                    // Map to clean alphabetic filename presentation (basenames only if directory matches)
+                                    List<String> baseMatches = new ArrayList<>();
+                                    for (String m : matches) {
+                                        int slash = m.lastIndexOf('/');
+                                        if (slash != -1 && slash != m.length() - 1) {
+                                            baseMatches.add(m.substring(slash + 1));
+                                        } else {
+                                            baseMatches.add(m);
+                                        }
+                                    }
+                                    System.out.print("\r\n" + String.join("  ", baseMatches) + "\r\n");
                                     System.out.print("$ " + currentInput);
                                     System.out.flush();
                                     
@@ -494,7 +565,6 @@ public class Main {
                                 }
                             }
                         } else {
-                            // No matches, ring bell
                             System.out.print((char) 7);
                             System.out.flush();
                             tabCount = 0;
