@@ -110,6 +110,26 @@ public class Main {
 
         for (int i = 0; i < input.length(); i++) {
             char c = input.charAt(i);
+
+            if (inDoubleQuotes && c == '\\') {
+
+                if (i + 1 < input.length()) {
+                    char next = input.charAt(i + 1);
+
+                    if (next == '\\'
+                            || next == '"'
+                            || next == '$') {
+
+                        current.append(next);
+                        i++;
+                        continue;
+                    }
+                }
+
+                current.append(c);
+                continue;
+            }
+            
             if (!inSingleQuotes
                     && !inDoubleQuotes
                     && c == '\\') {
