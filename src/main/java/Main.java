@@ -266,10 +266,16 @@ public class Main {
                             sb.append(completion);
                             System.out.print(completion);
                             System.out.flush();
-                        } else if (matches.size() > 1) {
-                            System.out.print((char) 7); // ASCII Alert Bell
+                        } else {
+                            // Ring a bell (\x07) if there are no matches (or multiple ambiguous matches)
+                            // This fulfills "xyz<TAB> should leave input unchanged and ring a bell"
+                            System.out.print((char) 7);
                             System.out.flush();
                         }
+                    } else {
+                        // If currentInput is empty or contains space, ring the bell on TAB
+                        System.out.print((char) 7);
+                        System.out.flush();
                     }
                 } else if (code == 127 || code == 8) { // Backspace / DEL
                     if (sb.length() > 0) {
