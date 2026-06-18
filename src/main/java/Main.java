@@ -135,11 +135,19 @@ public class Main {
                         continue;
                     }
 
-                    // Create arguments array where index 0 is resolved to the exact path
-                    String[] execArgs = Arrays.copyOf(seg.args, seg.args.length);
-                    execArgs[0] = executable;
+                    // Use bash with 'exec -a' to map the argv[0] to the original command name
+                    // while executing the resolved absolute path. This satisfies both #IP1 and #QJ0.
+                    List<String> shellCmd = new ArrayList<>();
+                    shellCmd.add("bash");
+                    shellCmd.add("-c");
+                    shellCmd.add("exec -a \"$0\" \"$@\"");
+                    shellCmd.add(seg.args[0]); // $0: This will be passed as argv[0] to the process
+                    shellCmd.add(executable);  // $1: The absolute path of the executable
+                    for (int j = 1; j < seg.args.length; j++) {
+                        shellCmd.add(seg.args[j]); // $2, $3...: the rest of the arguments
+                    }
 
-                    ProcessBuilder pb = new ProcessBuilder(execArgs);
+                    ProcessBuilder pb = new ProcessBuilder(shellCmd);
                     pb.directory(currentDirectory);
 
                     // Map Input streams cleanly based on dynamic pipelines
